@@ -1,8 +1,11 @@
 import pandas as pd
 import datetime
+import glob
+import os
 
-# read in latest downloaded version of ssheet
-ssheet = 'C:\\Users\\user\\Downloads\\My Balance Sheet (80).xlsx'
+# get the latest file exported from google sheets
+list_of_files = glob.glob(r'C:\Users\user\Downloads\My Balance Sheet**.xlsx')
+ssheet = max(list_of_files, key=os.path.getctime)
 
 # create a df for each sheet
 AssetInfo = pd.read_excel(ssheet, sheet_name='AssetInfo')
