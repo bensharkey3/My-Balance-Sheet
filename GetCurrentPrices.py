@@ -67,5 +67,13 @@ for i in asx_codes:
     temp = temp[['code', 'close_date', 'close_price']]
     dfasx = dfasx.append(temp, sort=False)
 
-# convert to datetime melbourne time
-dfasx['close_date'] = (pd.to_datetime(dfasx['close_date']) + pd.Timedelta('24:00:00')).apply(lambda x: x.date())
+# concat dataframes together, rename columns, return name instead of code
+df1 = pd.concat([dfasx, dfus], sort=False)
+df1 = df1.merge(AssetInfo, left_on='code', right_on='Code')[['close_date', 'Name', 'close_price']]
+df1.rename(columns={'close_date':'Date', 'close_price':'UnitPrice($AU)'}, inplace=True)
+
+# set date to cuurent day
+df1['Date'] = pd.datetime.today().strftime('%Y-%m-%d')
+
+# show output
+df1
