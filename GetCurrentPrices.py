@@ -72,8 +72,14 @@ df1 = pd.concat([dfasx, dfus], sort=False)
 df1 = df1.merge(AssetInfo, left_on='code', right_on='Code')[['close_date', 'Name', 'close_price']]
 df1.rename(columns={'close_date':'Date', 'close_price':'UnitPrice($AU)'}, inplace=True)
 
-# set date to cuurent day
+# append a row for 'cash'
+df1 = df1.append(pd.Series(['0', 'cash', 1], index=df1.columns), ignore_index=True)
+
+# set date to current day
 df1['Date'] = pd.datetime.today().strftime('%d-%b-%Y')
+
+# set date column as index
+df1.set_index('Date', inplace=True)
 
 # show output
 df1
