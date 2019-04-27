@@ -73,7 +73,7 @@ df1 = df1.merge(AssetInfo, left_on='code', right_on='Code')[['close_date', 'Name
 df1.rename(columns={'close_date':'Date', 'close_price':'UnitPrice($AU)'}, inplace=True)
 
 # set date to cuurent day
-df1['Date'] = pd.datetime.today().strftime('%Y-%m-%d')
+df1['Date'] = pd.datetime.today().strftime('%d-%b-%Y')
 
 # show output
 df1
