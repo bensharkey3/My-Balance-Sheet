@@ -95,9 +95,12 @@ try:
 except (ConnectionError, Timeout, TooManyRedirects) as e:
   print(e)
 
+# create a list of coins owned
+coins = AssetInfo[AssetInfo['Category'] == 'crypto']['Code'].tolist()
+
 # select only relevent coins
 cmc2 = cmc[['symbol', 'quote']]
-cmc2 = cmc2[cmc2['symbol'].isin(['MIOTA', 'MAID'])]
+cmc2 = cmc2[cmc2['symbol'].isin(coins)]
 
 # extract price from dictionary within the column and create new column for price
 dfe = []
