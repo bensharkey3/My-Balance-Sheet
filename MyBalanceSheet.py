@@ -24,12 +24,7 @@ def get_from_file():
 def create_cd(AssetInfo, Transactions, AssetValues, CashAccountHoldings, Liabilities):
     '''Creates cd and exports as csv'''
     # join AssetValues and Transactions (for non dollar amounts in Transactions)
-    ch = AssetValues[AssetValues['Date'] == date].merge(
-        Transactions[Transactions['UnitType'] != 'dollars'].groupby(['Name', 'AccountClass', 'UnitType']).sum().reset_index()
-        , on='Name')
-
-    # join AssetValues and Transactions (for non dollar amounts in Transactions)
-    ch = AssetValues[AssetValues['Date'] == date].merge(
+    ch = AssetValues[AssetValues['Date'] == AssetValues['Date'].max()].merge(
         Transactions[Transactions['UnitType'] != 'dollars'].groupby(['Name', 'AccountClass', 'UnitType']).sum().reset_index()
         , on='Name')
 
@@ -63,6 +58,7 @@ def create_cd(AssetInfo, Transactions, AssetValues, CashAccountHoldings, Liabili
 
     # add amount column
     cd['Amount($AU)'] = cd['Qty'] * cd['UnitPrice($AU)']
+
     cd = cd.sort_values('Amount($AU)', ascending=False)
 
     # write dataframe to csv
