@@ -29,7 +29,7 @@ def create_cd(AssetInfo, Transactions, AssetValues, CashAccountHoldings, Liabili
         , on='Name')
 
     # create cd (for dollar amounts in Transactions)
-    cd = Transactions[Transactions['UnitType'] == 'dollars'].groupby(['AccountClass', 'UnitType']).sum().reset_index()
+    cd = Transactions[(Transactions['UnitType'] == 'dollars') & (Transactions['TransactionType'] != 'NAB EB interest')].groupby(['AccountClass', 'UnitType']).sum().reset_index()
     cd['Name'] = 'cash'
     cd['UnitPrice($AU)'] = 1
 
@@ -68,7 +68,7 @@ def create_cd(AssetInfo, Transactions, AssetValues, CashAccountHoldings, Liabili
 def create_df(AssetInfo, Transactions, AssetValues, CashAccountHoldings, Liabilities):
     '''Create df csv. Contains a table of every holding on every date'''
     # group Transactions table by only the relevent columns
-    t1 = Transactions.groupby(['Date', 'Name', 'AccountClass', 'UnitType']).sum().reset_index()
+    t1 = Transactions[Transactions['TransactionType'] != 'NAB EB interest'].groupby(['Date', 'Name', 'AccountClass', 'UnitType']).sum().reset_index()
 
     # create a cumulative sum of Qty column
     t1['QtyCum'] = t1.groupby(['Name', 'AccountClass', 'UnitType'])['Qty'].cumsum()
@@ -127,35 +127,46 @@ def create_df(AssetInfo, Transactions, AssetValues, CashAccountHoldings, Liabili
     cumsav1.ffill(inplace=True)
     cumsav1.fillna(0, inplace=True)
 
-    # subtract out what belongs to the index and speculative accounts
     t6 = t5[t5['Name'] == 'cash'].groupby('Date')[['MktVal']].sum()
     cumsav2 = cumsav1.merge(t6, how='outer', on='Date')
     cumsav2.rename(columns={'MktVal':'OwedToIndex&Spec($AU)', 'Amount($AU)':'CashAccounts($AU)'}, inplace=True)
-    cumsav2['SavingsTotal($AU)'] = cumsav2['CashAccounts($AU)'] + cumsav2['InjectAmount($AU)'] - cumsav2['OwedToIndex&Spec($AU)']
-    cumsav2['SavingsTotalZeroed($AU)'] = cumsav2['CashAccounts($AU)'] + cumsav2['InjectAmount($AU)'] - cumsav2['OwedToIndex&Spec($AU)'] - 4451
 
     # add in a savings target line
     cumsav2.reset_index(inplace=True)
     cumsav2['SavingsTarget($AU)'] = 2000*((cumsav2['Date'] - cumsav2['Date'].min()).dt.days *12/365)
     cumsav2.set_index('Date', inplace=True)
-    #cumsav2[['SavingsTotalZeroed($AU)', 'SavingsTarget($AU)']].plot(figsize=(15,8), xlim=None)
 
     ### Create a table and plot net worth by date
-    nw = cumsav2[['CashAccounts($AU)', 'OwedToIndex&Spec($AU)']].merge(t5plt[['index', 'speculative', 'leveraged']], how='outer', on='Date')
+    nw = cumsav2[['CashAccounts($AU)', 'OwedToIndex&Spec($AU)', 'InjectAmount($AU)']].merge(t5plt[['index', 'speculative', 'leveraged']], how='outer', on='Date')
     Liabilities.set_index('Date',inplace=True)
     nw.replace(to_replace=pd.np.nan, value=0, inplace=True)
     nw = nw.merge(Liabilities[['Amount($AU)']], how='left', on='Date')
     nw.rename(columns={'Amount($AU)':'liabilities'}, inplace=True)
     nw['Total($AU)'] = nw['CashAccounts($AU)'] - nw['OwedToIndex&Spec($AU)'] + nw['index'] + nw['speculative'] + nw['leveraged'] - nw['liabilities']
     nw['LVR'] = nw['liabilities'] / (nw['Total($AU)'] + nw['liabilities'])
+    nw['NabEBPRepaymentsTotal'] = pd.np.where(nw['liabilities'] > 0, 149949-nw['liabilities'], 0)
+    # nw['NabEBIntPaymentsTotal'] = 
+    nw = nw.merge(Transactions[Transactions['TransactionType'] == 'NAB EB interest'][['Date', 'Qty']], how='left', on='Date')
+    nw['NabEBIntPaymentsTotal'] = nw['Qty']
+    nw.drop('Qty', axis=1, inplace=True)
+    nw['NabEBIntPaymentsTotal'] = nw['NabEBIntPaymentsTotal']*-1
+    nw['NabEBIntPaymentsTotal'] = nw['NabEBIntPaymentsTotal'].fillna(0)
+    nw['NabEBIntPaymentsTotal'] = nw['NabEBIntPaymentsTotal'].cumsum().astype(int)
+    nw.set_index("Date", inplace = True)
+    nw['leveraged(net)'] = nw['leveraged'] - nw['NabEBIntPaymentsTotal']
+
+    # subtract out what belongs to the index and speculative accounts, add injections and repayments
+    nw['SavingsTotal($AU)'] = nw['CashAccounts($AU)'] + nw['InjectAmount($AU)'] + nw['NabEBIntPaymentsTotal'] + nw['NabEBPRepaymentsTotal'] - nw['OwedToIndex&Spec($AU)']
+    nw['SavingsTotalZeroed($AU)'] = nw['SavingsTotal($AU)'] - 4451
+
     #nw['Total($AU)'].plot(figsize=(15,8))
-    nw.drop(['CashAccounts($AU)', 'OwedToIndex&Spec($AU)'], axis=1, inplace=True)
+    nw.drop(['CashAccounts($AU)', 'OwedToIndex&Spec($AU)', 'InjectAmount($AU)'], axis=1, inplace=True)
     df = nw.merge(cumsav2, how='left', on='Date')
     df['TotalZeroed($AU)'] = df['Total($AU)'] - df['Total($AU)'][0]
     df['CapitalGainTotalZeroed($AU)'] = df['TotalZeroed($AU)'] - df['SavingsTotalZeroed($AU)']
 
     ### Create the leveraged base 100 and compound interest targets
-    df['leveragedBase100'] = df['leveraged']*100 / 149949
+    df['leveragedBase100'] = df['leveraged(net)']*100 / 149949
     df['leveragedTarget7%'] =  pd.np.where(df.index >= '2019-10-30', 100*(1+0.07)**((df.index - datetime.datetime.strptime('2019-10-30', '%Y-%m-%d')).days /365), 0)
     df['leveragedTarget10%'] =  pd.np.where(df.index >= '2019-10-30', 100*(1+0.10)**((df.index - datetime.datetime.strptime('2019-10-30', '%Y-%m-%d')).days /365), 0)
 
